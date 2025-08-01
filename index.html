@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal</title>
+    <link rel="stylesheet" href="xterm.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0c0c0c;
+            color: #ffffff;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .terminal-wrapper {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .connection-controls {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 12px 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .control-group input {
+            background: #0c0c0c;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 6px 8px;
+            font-family: inherit;
+            font-size: 11px;
+            border-radius: 2px;
+        }
+
+        .control-group input:focus {
+            outline: none;
+            border-color: #5fcf80;
+        }
+
+        .url-group {
+            flex: 1;
+        }
+
+        .url-group input {
+            width: 100%;
+            min-width: 400px;
+        }
+
+        .credentials-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .credentials-group input {
+            min-width: 120px;
+        }
+
+        .connect-btn {
+            background: #5fcf80;
+            border: none;
+            color: #000;
+            padding: 6px 12px;
+            font-family: inherit;
+            font-size: 11px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .connect-btn:hover {
+            background: #4caf50;
+        }
+
+        .connect-btn:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .terminal-header {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .terminal-title {
+            color: #888;
+        }
+
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #ff5f56;
+        }
+
+        .status-dot.connected {
+            background: #5fcf80;
+        }
+
+        .status-dot.connecting {
+            background: #ffbd2e;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .terminal-body {
+            flex: 1;
+            padding: 16px;
+            background: #0c0c0c;
+        }
+
+        #terminal {
+            width: 100%;
+            height: 100%;
+        }
+
+        .error-message {
+            background: #ff5f56;
+            color: #000;
+            padding: 8px 12px;
+            border-radius: 2px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            display: none;
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+
+        /* Terminal customization */
+        .xterm {
+            padding: 8px;
+        }
+
+        .xterm-viewport {
+            background: #0c0c0c !important;
+        }
+
+        /* Fix for Mac keyboard input issues */
+        .xterm .xterm-helper-textarea {
+            /* Ensure textarea is properly positioned for IME */
+            position: absolute !important;
+            opacity: 0 !important;
+            left: -9999em !important;
+            top: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            z-index: -5 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            resize: none !important;
+            /* Important for Mac IME handling */
+            font-family: inherit !important;
+            font-size: inherit !important;
+        }
+
+        /* Ensure composition view is properly styled */
+        .xterm .composition-view {
+            background: #000 !important;
+            color: #FFF !important;
+            display: none !important;
+            position: absolute !important;
+            white-space: nowrap !important;
+            z-index: 1 !important;
+        }
+
+        .xterm .composition-view.active {
+            display: block !important;
+        }
+
+        @media (max-width: 768px) {
+            .connection-controls {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .control-group {
+                width: 100%;
+            }
+            
+            .control-group input {
+                width: 100%;
+            }
+            
+            .credentials-group {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .url-group input {
+                min-width: unset;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal-wrapper">
+        <div class="connection-controls">
+            <div class="control-group url-group">
+                <label>WebSocket URL</label>
+                <input type="url" id="websocketUrl" value="ws://localhost:8081/api/v1/vms/683c12f6-8af8-4cef-b8a9-960fa50e803d/ssh" placeholder="ws://localhost:8081/virtualbox/api/v1/vms/.../ssh">
+            </div>
+            
+            <div class="credentials-group">
+                <div class="control-group">
+                    <label>Username</label>
+                    <input type="text" id="username" placeholder="ssh username">
+                </div>
+                
+                <div class="control-group">
+                    <label>Password</label>
+                    <input type="password" id="password" placeholder="ssh password">
+                </div>
+            </div>
+            
+            <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+        </div>
+
+        <div class="terminal-header">
+            <span class="terminal-title">ssh-terminal</span>
+            <div class="connection-info">
+                <span id="statusText">disconnected</span>
+                <div class="status-dot" id="statusDot"></div>
+            </div>
+        </div>
+        
+        <div class="terminal-body">
+            <div id="terminal"></div>
+        </div>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <script src="xterm.js"></script>
+    <script>
+        let term;
+        let socket;
+        let isConnected = false;
+
+        function initTerminal() {
+            term = new Terminal({
+                cursorBlink: true,
+                fontSize: 14,
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                // Fix for Mac keyboard input issues
+                macOptionIsMeta: false,
+                macOptionClickForcesSelection: false,
+                rightClickSelectsWord: false,
+                fastScrollModifier: 'alt',
+                fastScrollSensitivity: 5,
+                // IME and composition handling
+                screenReaderMode: false,
+                // Ensure proper keyboard event handling
+                allowTransparency: true,
+                theme: {
+                    background: '#0c0c0c',
+                    foreground: '#ffffff',
+                    cursor: '#ffffff',
+                    selection: '#ffffff40',
+                    black: '#000000',
+                    red: '#ff5f56',
+                    green: '#5fcf80',
+                    yellow: '#ffbd2e',
+                    blue: '#5f9fff',
+                    magenta: '#ff5fff',
+                    cyan: '#5fffff',
+                    white: '#ffffff',
+                    brightBlack: '#666666',
+                    brightRed: '#ff5f56',
+                    brightGreen: '#5fcf80',
+                    brightYellow: '#ffbd2e',
+                    brightBlue: '#5f9fff',
+                    brightMagenta: '#ff5fff',
+                    brightCyan: '#5fffff',
+                    brightWhite: '#ffffff'
+                },
+                cols: 80,
+                rows: 24
+            });
+            term.open(document.getElementById('terminal'));
+            
+            // Additional Mac-specific keyboard handling
+            term.attachCustomKeyEventHandler(function(event) {
+                // Handle Mac-specific key combinations
+                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                
+                if (isMac) {
+                    // Allow normal typing for most keys
+                    if (event.key && event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+                        return true;
+                    }
+                    
+                    // Handle special Mac key combinations
+                    if (event.metaKey && event.key === 'c') {
+                        // Allow Cmd+C for copy
+                        return true;
+                    }
+                    if (event.metaKey && event.key === 'v') {
+                        // Allow Cmd+V for paste
+                        return true;
+                    }
+                    if (event.metaKey && event.key === 'a') {
+                        // Allow Cmd+A for select all
+                        return true;
+                    }
+                    
+                    // Prevent default behavior for other Cmd combinations
+                    if (event.metaKey) {
+                        event.preventDefault();
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Welcome message
+            term.writeln('SSH Terminal Ready');
+            term.writeln('Enter connection details above and click Connect');
+            term.writeln('');
+            term.write('$ ');
+        }
+
+        function updateStatus(text, status) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.className = 'status-dot ' + status;
+        }
+
+        function updateConnectButton() {
+            const btn = document.getElementById('connectBtn');
+            if (isConnected) {
+                btn.textContent = 'Disconnect';
+                btn.style.background = '#ff5f56';
+            } else {
+                btn.textContent = 'Connect';
+                btn.style.background = '#5fcf80';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function toggleConnection() {
+            if (isConnected) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            let websocketUrl = document.getElementById('websocketUrl').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!websocketUrl || !username || !password) {
+                showError('Please fill in all connection fields');
+                return;
+            }
+
+            // Build complete URL with query parameters
+            const url = new URL(websocketUrl);
+            url.searchParams.set('username', username);
+            url.searchParams.set('password', password);
+            websocketUrl = url.toString();
+
+            updateStatus('connecting', 'connecting');
+            updateConnectButton();
+
+            if (socket) {
+                socket.close();
+            }
+
+            socket = new WebSocket(websocketUrl);
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = function() {
+                updateStatus('connected', 'connected');
+                isConnected = true;
+                updateConnectButton();
+                
+                term.clear();
+                term.writeln('Connected to SSH server');
+                term.write('$ ');
+            };
+
+            socket.onmessage = function(event) {
+                if (typeof event.data === 'string') {
+                    term.write(event.data);
+                } else {
+                    // Use UTF-8 decoder for proper character handling on Mac
+                    const textDecoder = new TextDecoder('utf-8');
+                    const text = textDecoder.decode(new Uint8Array(event.data));
+                    term.write(text);
+                }
+            };
+
+            socket.onerror = function(event) {
+                console.error('WebSocket error:', event);
+                showError('Connection failed. Check URL and credentials.');
+                updateStatus('disconnected', '');
+                isConnected = false;
+                updateConnectButton();
+            };
+
+            socket.onclose = function() {
+                term.writeln('\r\nDisconnected');
+                term.write('$ ');
+                updateStatus('disconnected', '');
+                isConnected = false;
+                updateConnectButton();
+            };
+
+            term.onData(function(data) {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    // Ensure proper character encoding for Mac
+                    if (typeof data === 'string') {
+                        socket.send(data);
+                    } else {
+                        // Handle binary data if needed
+                        socket.send(data);
+                    }
+                }
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.close();
+            }
+            updateStatus('disconnected', '');
+            isConnected = false;
+            updateConnectButton();
+            term.writeln('\r\nDisconnected');
+            term.write('$ ');
+        }
+
+        // Debug function for keyboard issues
+        function debugKeyboardEvent(event) {
+            console.log('Keyboard Event:', {
+                type: event.type,
+                key: event.key,
+                keyCode: event.keyCode,
+                charCode: event.charCode,
+                which: event.which,
+                ctrlKey: event.ctrlKey,
+                altKey: event.altKey,
+                metaKey: event.metaKey,
+                shiftKey: event.shiftKey,
+                isComposing: event.isComposing,
+                data: event.data,
+                inputType: event.inputType,
+                target: event.target.tagName
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initTerminal();
+            updateConnectButton();
+            
+            // Handle Enter key in input fields
+            document.getElementById('websocketUrl').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('username').focus();
+                }
+            });
+            
+            document.getElementById('username').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    document.getElementById('password').focus();
+                }
+            });
+            
+            document.getElementById('password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    if (!isConnected) {
+                        connect();
+                    }
+                }
+            });
+
+            // Add keyboard debugging (uncomment to debug)
+            // document.addEventListener('keydown', debugKeyboardEvent);
+            // document.addEventListener('keypress', debugKeyboardEvent);
+            // document.addEventListener('input', debugKeyboardEvent);
+        });
+    </script>
+</body>
+</html>
