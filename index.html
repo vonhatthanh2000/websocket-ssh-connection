@@ -409,20 +409,72 @@
                 return;
             }
 
-            // Build complete URL with query parameters
-            const url = new URL(websocketUrl);
-            url.searchParams.set('username', username);
-            url.searchParams.set('password', password);
-            websocketUrl = url.toString();
+            // Extract VM ID from the WebSocket URL
+            const urlMatch = websocketUrl.match(/\/vms\/([^\/]+)\/ssh/);
+            if (!urlMatch) {
+                showError('Invalid WebSocket URL format. Expected: ws://localhost:8081/api/v1/vms/{vmID}/ssh');
+                return;
+            }
+            const vmID = urlMatch[1];
 
             updateStatus('connecting', 'connecting');
             updateConnectButton();
+
+            // First, call the API to get the SSH token
+            const apiUrl = 'http://localhost:8080';
+            const requestBody = {
+                jsonrpc: "2.0",
+                method: "virtualbox_generateSSHToken",
+                params: [vmID, username, password],
+                id: 1
+            };
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error.message || 'Failed to generate SSH token');
+                }
+                
+                const token = data.result.token;
+                if (!token) {
+                    throw new Error('No token received from server');
+                }
+
+                // Now connect to WebSocket with the token
+                connectToWebSocket(websocketUrl, token);
+            })
+            .catch(error => {
+                console.error('API call failed:', error);
+                showError(`Failed to get SSH token: ${error.message}`);
+                updateStatus('disconnected', '');
+                isConnected = false;
+                updateConnectButton();
+            });
+        }
+
+        function connectToWebSocket(websocketUrl, token) {
+            // Build WebSocket URL with token parameter
+            const url = new URL(websocketUrl);
+            url.searchParams.set('token', token);
+            const finalWebSocketUrl = url.toString();
 
             if (socket) {
                 socket.close();
             }
 
-            socket = new WebSocket(websocketUrl);
+            socket = new WebSocket(finalWebSocketUrl);
             socket.binaryType = 'arraybuffer';
 
             socket.onopen = function() {
