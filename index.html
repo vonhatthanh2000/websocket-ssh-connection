@@ -242,7 +242,7 @@
         <div class="connection-controls">
             <div class="control-group url-group">
                 <label>WebSocket URL</label>
-                <input type="url" id="websocketUrl" value="ws://localhost:8081/api/v1/vms/683c12f6-8af8-4cef-b8a9-960fa50e803d/ssh" placeholder="ws://localhost:8081/virtualbox/api/v1/vms/.../ssh">
+                <input type="url" id="websocketUrl" value="ws://localhost:8081/ws/v1/virtualbox/1/ssh" placeholder="ws://localhost:8081/ws/v1/virtualbox/{vmID}/ssh">
             </div>
             
             <div class="credentials-group">
@@ -409,10 +409,10 @@
                 return;
             }
 
-            // Extract VM ID from the WebSocket URL
-            const urlMatch = websocketUrl.match(/\/vms\/([^\/]+)\/ssh/);
+            // Extract VM ID from the WebSocket URL - looking for the number after /virtualbox/
+            const urlMatch = websocketUrl.match(/\/virtualbox\/(\d+)\/ssh/);
             if (!urlMatch) {
-                showError('Invalid WebSocket URL format. Expected: ws://localhost:8081/api/v1/vms/{vmID}/ssh');
+                showError('Invalid WebSocket URL format. Expected: ws://localhost:8081/ws/v1/virtualbox/{vmID}/ssh');
                 return;
             }
             const vmID = urlMatch[1];
@@ -421,12 +421,10 @@
             updateConnectButton();
 
             // First, call the API to get the SSH token
-            const apiUrl = 'http://localhost:8080';
+            const apiUrl = `http://localhost:8081/api/v1/virtualbox/${vmID}/ssh/token`;
             const requestBody = {
-                jsonrpc: "2.0",
-                method: "virtualbox_generateSSHToken",
-                params: [vmID, username, password],
-                id: 1
+                username: username,
+                password: password
             };
 
             fetch(apiUrl, {
@@ -443,11 +441,7 @@
                 return response.json();
             })
             .then(data => {
-                if (data.error) {
-                    throw new Error(data.error.message || 'Failed to generate SSH token');
-                }
-                
-                const token = data.result.token;
+                const token = data.token;
                 if (!token) {
                     throw new Error('No token received from server');
                 }
